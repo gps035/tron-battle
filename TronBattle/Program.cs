@@ -2,10 +2,46 @@
 
 namespace TronBattle
 {
+	internal class Program
+	{
+		private static Position[] GetPlayerPositions(int playerCount)
+		{
+			var initialPositions = new Position[playerCount];
+			for (var i = 0; i < playerCount; i++)
+			{
+				var positionInputs = Console.ReadLine().Split(' ');
+				var xNew = Int32.Parse(positionInputs[2]);
+				var yNew = Int32.Parse(positionInputs[3]);
+				initialPositions[i] = new Position(xNew, yNew);
+			}
+			return initialPositions;
+		}
+
+		private static void Main()
+		{
+			var inputs = Console.ReadLine().Split(' ');
+			var count = Int32.Parse(inputs[0]);
+			var myNumber = Int32.Parse(inputs[1]);
+			var initialPositions = GetPlayerPositions(count);
+			var player = new Player(count, myNumber, initialPositions);
+			// game loop
+			do
+			{
+				Console.WriteLine(player.GetNextDirection().ToString());
+				Console.ReadLine(); //Throw away user details, not needed now
+				player.AddLatestPositions(GetPlayerPositions(count));
+			} while (true);
+		}
+	}
+
+
 	internal enum Direction
 	{
 		// ReSharper disable InconsistentNaming
-		UP, DOWN, LEFT, RIGHT
+		UP,
+		RIGHT,
+		DOWN,
+		LEFT,
 		// ReSharper restore InconsistentNaming
 	}
 
@@ -36,135 +72,133 @@ namespace TronBattle
 					throw new ArgumentOutOfRangeException(nameof(direction), direction, null);
 			}
 		}
+
 		public override string ToString() => $"{{X:{X}, Y:{Y}}}";
 	}
 
 	class Player
 	{
-		private static int _numberOfPlayers;
-		private static int _myNumber;
+		private readonly bool[,] _cells;
 
+		private Direction _currentDirection = Direction.UP;
+		private bool _start = true;
+		private readonly int _numberOfPlayers;
+		private readonly int _myNumber;
+		private readonly Position[] _positions;
+		private readonly int _xSize;
+		private readonly int _ySize;
 
-		private const int XSize = 30;
-		private const int YSize = 20;
-		private static readonly bool[,] Cells = new bool[XSize, YSize];
-
-		private static Position _currentPosition = new Position(0, 0);
-
-		private static Direction _currentDirection = Direction.UP;
-		private static bool _start = true;
-		static void Main()
+		public Player(int count, int myNumber, Position[] initialPositions)
 		{
-			// game loop
-			while (true)
-			{
-				var playerInputs = Console.ReadLine().Split(' ');
-				_numberOfPlayers = Int32.Parse(playerInputs[0]); // total number of players (2 to 4).
-				_myNumber = Int32.Parse(playerInputs[1]); // your player number (0 to 3).
-				Console.Error.WriteLine("Getting positions...");
-				for (var i = 0; i < _numberOfPlayers; i++)
-				{
-					var positionInputs = Console.ReadLine().Split(' ');
-					var xNew = Int32.Parse(positionInputs[2]); // starting X coordinate of lightcycle (can be the same as X0 if you play before this player)
-					var yNew = Int32.Parse(positionInputs[3]); // starting Y coordinate of lightcycle (can be the same as Y0 if you play before this player)
-					Cells[xNew, yNew] = true;
-					var position = new Position(xNew, yNew);
+			_xSize = 30;
+			_ySize = 20;
+			_cells = new bool[_xSize, _ySize];
+			_numberOfPlayers = count;
+			_myNumber = myNumber;
+			_positions = initialPositions;
+			AddLatestPositions(initialPositions);
+		}
 
-					if (i == _myNumber)
-					{
-						_currentPosition = position;
-						Console.Error.WriteLine("Me");
-					}
-					else
-					{
-						Console.Error.WriteLine($"Player {i}");
-					}
-					Console.Error.WriteLine(position);
-				}
-				if (_start)
-				{
-					_start = false;
-					_currentDirection = SetBestStartDirection();
-					AnnounceDirection(_currentDirection);
-					continue;
-				}
-				var nextDirection = _currentDirection;
-				var ahead = _currentPosition.NextPosition(nextDirection);
-				Console.Error.WriteLine($"Ahead {ahead}");
+		private Position CurrentPosition => _positions[_myNumber];
+
+		public void AddLatestPositions(Position[] positions)
+		{
+			Console.Error.WriteLine("Getting positions...");
+			for (var i = 0; i < _numberOfPlayers; i++)
+			{
+				var thisPos = positions[i];
+				_positions[i] = thisPos;
+				_cells[thisPos.X, thisPos.Y] = true;
+
+				Console.Error.WriteLine(i == _myNumber ? "Me" : $"Player {i}");
+				Console.Error.WriteLine(thisPos);
+			}
+		}
+
+		public Direction GetNextDirection()
+		{
+			if (_start)
+			{
+				_currentDirection = SetBestStartDirection(CurrentPosition);
+				_start = false;
+				return _currentDirection;
+			}
+
+			var nextDirection = _currentDirection;
+			var ahead = CurrentPosition.NextPosition(nextDirection);
+			Console.Error.WriteLine($"Ahead {ahead}");
+			if (WallAtPosition(ahead) || TrailAtPosition(ahead))
+			{
+				nextDirection = TurnClockWise(_currentDirection);
+				ahead = CurrentPosition.NextPosition(nextDirection);
+				Console.Error.WriteLine($"Clockwise {ahead}");
+
 				if (WallAtPosition(ahead) || TrailAtPosition(ahead))
 				{
-					nextDirection = TurnClockWise(_currentDirection);
-					ahead = _currentPosition.NextPosition(nextDirection);
-					Console.Error.WriteLine($"Clockwise {ahead}");
+					nextDirection = TurnAntiClockWise(_currentDirection);
 
-					if (WallAtPosition(ahead) || TrailAtPosition(ahead))
-					{
-						nextDirection = TurnAntiClockWise(_currentDirection);
-
-						Console.Error.WriteLine("Turning Anticlockwise");
-						_currentDirection = nextDirection;
-					}
-					else
-					{
-						Console.Error.WriteLine("Turning Clockwise");
-						_currentDirection = nextDirection;
-					}
+					Console.Error.WriteLine("Turning Anticlockwise");
+					_currentDirection = nextDirection;
 				}
 				else
 				{
-					Console.Error.WriteLine("Straight ahead!");
+					Console.Error.WriteLine("Turning Clockwise");
 					_currentDirection = nextDirection;
 				}
-				// Write an action using Console.WriteLine()
-				// To debug: Console.Error.WriteLine("Debug messages...");
-
-				AnnounceDirection(_currentDirection);
 			}
-		}
-
-		private static bool TrailAtPosition(Position pos)
-		{
-			if (!Cells[pos.X, pos.Y])
+			else
 			{
-				return false;
+				Console.Error.WriteLine("Straight ahead!");
+				_currentDirection = nextDirection;
 			}
 
-			Console.Error.WriteLine($"Trail at position {pos}");
-			return true;
+			return _currentDirection;
 		}
 
-		private static bool WallAtPosition(Position pos)
+		private bool TrailAtPosition(Position pos)
 		{
-			if (pos.X >= 0 && pos.Y >= 0 && pos.X < XSize && pos.Y < YSize)
+			if (_cells[pos.X, pos.Y])
 			{
-				return false;
+				Console.Error.WriteLine($"Trail at position {pos}");
+				return true;
 			}
 
-			Console.Error.WriteLine($"Wall at position {pos}");
-			return true;
+			return false;
 		}
 
-		private static Direction SetBestStartDirection()
+		private bool WallAtPosition(Position pos)
+		{
+			if (pos.X < 0 || pos.Y < 0 || pos.X >= _xSize || pos.Y >= _ySize)
+			{
+				Console.Error.WriteLine($"Wall at position {pos}");
+				return true;
+			}
+
+			return false;
+		}
+
+		private Direction SetBestStartDirection(Position position)
 		{
 			var bestDirection = Direction.RIGHT;
-			var right = XSize - _currentPosition.X;
+			var right = _xSize - position.X;
 			var best = right;
-			var left = XSize - right;
+			var left = _xSize - right;
 			if (left > best)
 			{
 				best = left;
 				bestDirection = Direction.LEFT;
 			}
-			var down = YSize - _currentPosition.Y;
+			var down = _ySize - position.Y;
 			if (down > best)
 			{
 				best = down;
 				bestDirection = Direction.DOWN;
 			}
-			var up = YSize - down;
+			var up = _ySize - down;
 			if (up > best)
 			{
 				bestDirection = Direction.UP;
+				return bestDirection;
 			}
 			return bestDirection;
 		}
@@ -202,7 +236,5 @@ namespace TronBattle
 					throw new ArgumentOutOfRangeException(nameof(lastDirection), lastDirection, null);
 			}
 		}
-
-		private static void AnnounceDirection(Direction direction) => Console.WriteLine(direction.ToString());
 	}
 }
