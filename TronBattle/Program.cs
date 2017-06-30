@@ -2,7 +2,7 @@
 
 namespace TronBattle
 {
-	internal class Program
+	internal static class Program
 	{
 		private static Position[] GetPlayerPositions(int playerCount)
 		{
@@ -10,9 +10,11 @@ namespace TronBattle
 			for (var i = 0; i < playerCount; i++)
 			{
 				var positionInputs = Console.ReadLine().Split(' ');
+				var xInit = Int32.Parse(positionInputs[0]);
+				var yInit = Int32.Parse(positionInputs[1]);
 				var xNew = Int32.Parse(positionInputs[2]);
 				var yNew = Int32.Parse(positionInputs[3]);
-				initialPositions[i] = new Position(xNew, yNew);
+				initialPositions[i] = new Position(xInit, yInit, xNew, yNew);
 			}
 			return initialPositions;
 		}
@@ -22,14 +24,13 @@ namespace TronBattle
 			var inputs = Console.ReadLine().Split(' ');
 			var count = Int32.Parse(inputs[0]);
 			var myNumber = Int32.Parse(inputs[1]);
-			var initialPositions = GetPlayerPositions(count);
-			var player = new Player(count, myNumber, initialPositions);
+			var player = new Player(count, myNumber);
 			// game loop
 			do
 			{
+				player.AddLatestPositions(GetPlayerPositions(count));
 				Console.WriteLine(player.GetNextDirection().ToString());
 				Console.ReadLine(); //Throw away user details, not needed now
-				player.AddLatestPositions(GetPlayerPositions(count));
 			} while (true);
 		}
 	}
@@ -47,36 +48,40 @@ namespace TronBattle
 
 	internal struct Position
 	{
-		public Position(int x, int y)
+		public Position(int xInit, int yInit, int xNew, int yNew)
 		{
-			X = x;
-			Y = y;
+			XInit = xInit;
+			YInit = yInit;
+			XNew = xNew;
+			YNew = yNew;
 		}
 
-		public int X { get; }
-		public int Y { get; }
+		public int XInit { get; }
+		public int YInit { get; }
+		public int XNew { get; }
+		public int YNew { get; }
 
 		public Position NextPosition(Direction direction)
 		{
 			switch (direction)
 			{
 				case Direction.UP:
-					return new Position(X, Y - 1);
+					return new Position(XNew, YNew, XNew, YNew - 1);
 				case Direction.RIGHT:
-					return new Position(X + 1, Y);
+					return new Position(XNew, YNew, XNew + 1, YNew);
 				case Direction.DOWN:
-					return new Position(X, Y + 1);
+					return new Position(XNew, YNew, XNew, YNew + 1);
 				case Direction.LEFT:
-					return new Position(X - 1, Y);
+					return new Position(XNew, YNew, XNew - 1, YNew);
 				default:
 					throw new ArgumentOutOfRangeException(nameof(direction), direction, null);
 			}
 		}
 
-		public override string ToString() => $"{{X:{X}, Y:{Y}}}";
+		public override string ToString() => $"{{XInit:{XInit}, YInit:{YInit}, XNew:{XNew}, YNew:{YNew}}}";
 	}
 
-	class Player
+	internal sealed class Player
 	{
 		private readonly bool[,] _cells;
 
@@ -88,15 +93,14 @@ namespace TronBattle
 		private readonly int _xSize;
 		private readonly int _ySize;
 
-		public Player(int count, int myNumber, Position[] initialPositions)
+		public Player(int count, int myNumber)
 		{
 			_xSize = 30;
 			_ySize = 20;
 			_cells = new bool[_xSize, _ySize];
 			_numberOfPlayers = count;
 			_myNumber = myNumber;
-			_positions = initialPositions;
-			AddLatestPositions(initialPositions);
+			_positions = new Position[count];
 		}
 
 		private Position CurrentPosition => _positions[_myNumber];
@@ -108,7 +112,14 @@ namespace TronBattle
 			{
 				var thisPos = positions[i];
 				_positions[i] = thisPos;
-				_cells[thisPos.X, thisPos.Y] = true;
+				if (thisPos.XInit >= 0)
+				{
+					_cells[thisPos.XInit, thisPos.YInit] = true;
+				}
+				if (thisPos.XNew >= 0)
+				{
+					_cells[thisPos.XNew, thisPos.YNew] = true;
+				}
 
 				Console.Error.WriteLine(i == _myNumber ? "Me" : $"Player {i}");
 				Console.Error.WriteLine(thisPos);
@@ -157,7 +168,7 @@ namespace TronBattle
 
 		private bool TrailAtPosition(Position pos)
 		{
-			if (_cells[pos.X, pos.Y])
+			if (_cells[pos.XNew, pos.YNew])
 			{
 				Console.Error.WriteLine($"Trail at position {pos}");
 				return true;
@@ -168,7 +179,7 @@ namespace TronBattle
 
 		private bool WallAtPosition(Position pos)
 		{
-			if (pos.X < 0 || pos.Y < 0 || pos.X >= _xSize || pos.Y >= _ySize)
+			if (pos.XNew < 0 || pos.YNew < 0 || pos.XNew >= _xSize || pos.YNew >= _ySize)
 			{
 				Console.Error.WriteLine($"Wall at position {pos}");
 				return true;
@@ -180,7 +191,7 @@ namespace TronBattle
 		private Direction SetBestStartDirection(Position position)
 		{
 			var bestDirection = Direction.RIGHT;
-			var right = _xSize - position.X;
+			var right = _xSize - position.XNew;
 			var best = right;
 			var left = _xSize - right;
 			if (left > best)
@@ -188,7 +199,7 @@ namespace TronBattle
 				best = left;
 				bestDirection = Direction.LEFT;
 			}
-			var down = _ySize - position.Y;
+			var down = _ySize - position.YNew;
 			if (down > best)
 			{
 				best = down;
